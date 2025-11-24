@@ -223,7 +223,7 @@ def propagate_circuit(
         pp.propagate(gate, sub_columns)
 
 
-def pauli_polynomial_steiner_gray_clifford(pp: PauliPolynomial, topo: Topology):
+def pauli_polynomial_steiner_gray_clifford(pp: PauliPolynomial, topo: Topology, return_tableau=False):
     perm_gadgets = []
     permutation = {k: k for k in range(pp.num_qubits)}
     G = topo.to_nx
@@ -526,6 +526,8 @@ def pauli_polynomial_steiner_gray_clifford(pp: PauliPolynomial, topo: Topology):
     circ_recurse, circ_prop = identity_recurse(
         columns_to_use, list(range(pp.num_qubits))
     )
+    if return_tableau:
+        return circ_out + circ_recurse, perm_gadgets, circ_prop
     circ_prop, permutation = synthesize_tableau(
         circ_prop.to_tableau(), topo, include_swaps=False
     )

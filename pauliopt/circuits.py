@@ -213,12 +213,12 @@ class AbstractCircuit:
     @staticmethod
     def from_qiskit(qc: "qiskit.QuantumCircuit"):
         circ = Circuit(qc.num_qubits)
-
+        print("number of qubits:", qc.num_qubits)
+        # print("code enter here")
         for inst in qc:
             qubits = _get_qubits_qiskit(inst.qubits, qc.qregs[0])
             phase = _get_phase_qiskit(inst.operation.params)
             circ.add_gate(QISKIT_CONVERSION[inst.operation.name](qubits, phase))
-
         return circ
 
     def to_qiskit(self):
