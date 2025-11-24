@@ -108,8 +108,8 @@ def naive_synth(pp, ct, topo):
     #print("Naive ct circuit:", naive_ct.count_ops())
     print("Naive Synthesized circuit:", naive_circuit.count_ops())
 
-#naive_synth(deepcopy(pp), deepcopy(ct)), topo)
-#naive_synth(deepcopy(alt_pp), deepcopy(ct), topo)
+naive_synth(deepcopy(pp), deepcopy(ct), topo)
+naive_synth(deepcopy(alt_pp), deepcopy(ct), topo)
 
 def lex_synth(pp, ct: CliffordTableau, topo):
     # Synthesize PauliPolynomial

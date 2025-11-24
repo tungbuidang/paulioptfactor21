@@ -659,6 +659,7 @@ ccx val4, val0, val1;
 ccx exp9, val3, val4;
 x val3;
 h exp9;
+barrier val0, val1, val2, val3, val4, exp0, exp1, exp2, exp3, exp4, exp5, exp6, exp7, exp8, exp9; 
 U(pi/2,pi/4,-pi) exp8;
 cx exp8,exp7;
 U(0,0,-pi/4) exp7;

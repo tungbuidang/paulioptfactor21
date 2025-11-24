@@ -103,6 +103,7 @@ def naive_synth(pp, ct, topo):
     #print("Naive pp circuit:", naive_pp.count_ops())
     #print("Naive ct circuit:", naive_ct.count_ops())
     print("Naive Synthesized circuit:", naive_circuit.count_ops())
+    return naive_circuit
 
 #naive_synth(deepcopy(pp), deepcopy(ct)), topo)
 #naive_synth(deepcopy(alt_pp), deepcopy(ct), topo)
@@ -123,81 +124,87 @@ def lex_synth(pp, ct: CliffordTableau, topo):
     lex_circuit = lex_pp.compose(lex_ct)
     #print("Lex ct circuit:", lex_ct.count_ops())
     print("Lex Synthesized circuit:", lex_circuit.count_ops())
-
+    return lex_circuit
 # lex_synth(deepcopy(pp), deepcopy(ct), topo)
 # lex_synth(deepcopy(alt_pp), deepcopy(ct), topo)
 
-#----------------------------------------------#
-# # math 
-# from qiskit import Aer, execute
-# from fractions import Fraction
-# import math 
-# import pandas as pd
+    # ----------------------------------------------#
+def factoring21(qiskit_circuit):
+    # math 
+    from qiskit import Aer, execute
+    from fractions import Fraction
+    import math 
+    import pandas as pd
 
-# shotcount = 100
-# sim = Aer.get_backend('qasm_simulator')
-# job = execute(qiskit_circuit, sim, shots=shotcount)
-# result = job.result()
-# count = result.get_counts(qiskit_circuit)
+    shotcount = 100
+    sim = Aer.get_backend('qasm_simulator')
+    job = execute(qiskit_circuit, sim, shots=shotcount)
+    result = job.result()
+    count = result.get_counts(qiskit_circuit)
 
-# # -----------------------------------------------------------------------------------------
-# # organize data 
+    # -----------------------------------------------------------------------------------------
+    # organize data 
 
-# number_hit =  [] 
-# frequency  =  []
-# fraction   =  []
-# denominator = []
+    number_hit =  [] 
+    frequency  =  []
+    fraction   =  []
+    denominator = []
 
-# for measured_value in count:
-#     num = measured_value[::].replace(' ', '')  # remove spaces
-#     value = count.get(measured_value[::])
-#     frequency.append(value)
-#     number_hit.append(int(num, 2))  
-#     frac = Fraction(int(num, 2),1024).limit_denominator(21)
-#     fraction.append(frac)
-#     denominator.append(frac.denominator)
+    for measured_value in count:
+        num = measured_value[::].replace(' ', '')  # remove spaces
+        value = count.get(measured_value[::])
+        frequency.append(value)
+        number_hit.append(int(num, 2))  
+        frac = Fraction(int(num, 2),1024).limit_denominator(21)
+        fraction.append(frac)
+        denominator.append(frac.denominator)
 
 
-# df = pd.DataFrame ({
-#     "number hit": number_hit,
-#     "frequency": frequency,
-#     "fraction": fraction,
-#     "denominator": denominator
-# })
+    df = pd.DataFrame ({
+        "number hit": number_hit,
+        "frequency": frequency,
+        "fraction": fraction,
+        "denominator": denominator
+    })
 
-# print("Original data sampled from the quantum circuit: ")
-# print(df)
-# filtered_df = df[df['frequency'] > shotcount*0.04] # equivalent to more than 40 counts for every 1000 shots  
+    print("Original data sampled from the quantum circuit: ")
+    print(df)
+    filtered_df = df[df['frequency'] > shotcount*0.04] # equivalent to more than 40 counts for every 1000 shots  
 
-# print("Remove some noisy element that have low count: ")
-# print(filtered_df)
+    print("Remove some noisy element that have low count: ")
+    print(filtered_df)
 
-# period = []
-# for num in filtered_df['denominator']:
-#     if num not in period and num % 2 == 0:
-#         period.append(num)
+    period = []
+    for num in filtered_df['denominator']:
+        if num not in period and num % 2 == 0:
+            period.append(num)
 
-# print("possible period value to find the factors: ")
-# print(period)
+    print("possible period value to find the factors: ")
+    print(period)
 
-# for num in period: 
-#     guess1 = 2**(num//2) + 1 
-#     guess2 = 2**(num//2) - 1
-#     if math.gcd(guess1, 21) not in [1, 21]:
-#         print("factor found: ", math.gcd(guess1, 21))
-#     if math.gcd(guess2, 21) not in [1, 21]:
-#         print("factor found: ", math.gcd(guess2, 21))
+    for num in period: 
+        guess1 = 2**(num//2) + 1 
+        guess2 = 2**(num//2) - 1
+        if math.gcd(guess1, 21) not in [1, 21]:
+            print("factor found: ", math.gcd(guess1, 21))
+        if math.gcd(guess2, 21) not in [1, 21]:
+            print("factor found: ", math.gcd(guess2, 21))
 
 def split_circuit_before_measurement(qiskit_circuit):
     nqubits = qiskit_circuit.num_qubits
     nbits = qiskit_circuit.num_clbits
     new_circuit = QuantumCircuit(nqubits, nbits)
     new_circuit.compose(qiskit_circuit, inplace=True)
+    circuit = new_circuit.copy_empty_like()
     barrier_index = -1
+    for i, instr in enumerate(new_circuit.data):
+        if instr.operation.name == "barrier":
+            barrier_index = i
+            break
     for instr in new_circuit.data[:barrier_index]:
-        new_circuit.append(instr.operation, instr.qubits, instr.clbits)
-    print("Circuit without final measurements", new_circuit.count_ops())
-    return new_circuit
+        circuit.append(instr.operation, instr.qubits, instr.clbits)
+    print("Circuit without final measurements", circuit.count_ops())
+    return circuit
 
 
 if __name__ == "__main__":
@@ -210,13 +217,34 @@ if __name__ == "__main__":
     else:
         backend = None
         topo = Topology.complete(15)
-        
+
+    #qasm to qiskit    
     qiskit_circuit = QuantumCircuit.from_qasm_file("factor21.qasm")
     print("Circuit with measurements", qiskit_circuit.count_ops())
     new_circuit = split_circuit_before_measurement(qiskit_circuit)
     num_qubits = new_circuit.num_qubits
     qiskit_tranpile = transpile(new_circuit, backend=backend, basis_gates=['h', 'cx', 'x', 'rz', 'sx', 's', 'sxdg'], optimization_level=3)
+    print("Qiskit transpiled circuit:", qiskit_tranpile.count_ops())
+    
+    #qiskit to pauliopt
     pauliopt_circuit = None 
     pauliopt_circuit = Circuit.from_qiskit(new_circuit)
     pp, ct = synthesize_pp_and_ct(pauliopt_circuit, num_qubits)
     
+    from pauliopt.pauli.simplification.simple_simplify import simplify_pauli_polynomial
+    pp = simplify_pauli_polynomial(pp, allow_acs=False)
+    print_pp_info(pp, "Optimized")
+    alt_pp = simplify_pauli_polynomial(pp, allow_acs=True)
+    print_pp_info(alt_pp, "Shuffled = Wrong")
+
+    #pauliopt to qiskit 
+    # naive_circuit_no_acs = naive_synth(deepcopy(pp), deepcopy(ct), topo)
+    # naive_circuit_acs = naive_synth(deepcopy(alt_pp), deepcopy(ct), topo)
+    # lex_circuit_no_acs = lex_synth(deepcopy(pp), deepcopy(ct), topo)
+    # lex_circuit_acs = lex_synth(deepcopy(alt_pp), deepcopy(ct), topo)
+
+    #add measurement after barrier back 
+
+
+    #run and makesure factoring 21 is correct
+    factoring21(qiskit_circuit)
