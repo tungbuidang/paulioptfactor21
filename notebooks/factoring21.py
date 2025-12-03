@@ -10,49 +10,20 @@ from qiskit import QuantumCircuit
 from pauliopt.circuits import Circuit
 from copy import deepcopy, copy
 
-# print(sys.executable)
-print("qiskit version is: ")
-print(qiskit.__version__)
-# print(pauliopt)
 
 # Target device:
 from qiskit.providers.fake_provider import FakeBoeblingenV2
 from pauliopt.topologies import Topology
 
 
-# # Qiskit transpiler
-from qiskit import transpile
-# transpiled_circuit = transpile(circuit, backend=backend, basis_gates=['h', 'cx', 'x', 'rz', 'sx', 's', 'sxdg'], optimization_level=3)
-# print("Qiskit transpiled circuit:", transpiled_circuit.count_ops())
 
-#pauliopt
-# pauliopt_circuit = None
-# pauliopt_circuit = Circuit.from_qiskit(circuit)
+from qiskit import transpile
 
 # Add all gates to PauliPolynomial in reverse
 from pauliopt.pauli.pauli_polynomial import PauliPolynomial, PauliGadget
 from pauliopt.clifford.tableau import CliffordTableau, CliffordGate
 from pauliopt.pauli.pauli_gadget import PPhase, I, X, Z
 from pauliopt.utils import Angle, pi
-# # Create CliffordTableau and PauliPolynomial
-# ct = CliffordTableau(circuit.num_qubits)
-# pp = PauliPolynomial(circuit.num_qubits)
-# # Fill the PauliPolynomial and CliffordTableau with the circuit
-# from itertools import product
-# for gate in reversed(pauliopt_circuit.gates):
-#     if isinstance(gate, CliffordGate):
-#         pp.propagate_inplace(gate)
-#         ct.prepend_gate(gate)
-#     elif gate.name == "CCX":
-#         # Add that
-#         for paulistring in product([I, Z], [I,Z], [I,X]): 
-#             if paulistring == (I, I, I):
-#                 continue
-#             angle = Angle(1 / 4) if paulistring.count(X) % 2 == 1 else Angle(-1 / 4)
-#             final_paulistring = [I if i not in gate.qubits else paulistring[gate.qubits.index(i)] for i in range(circuit.num_qubits)]
-#             pp >>= PPhase(angle) @ final_paulistring
-#     else:
-#         raise NotImplementedError(f"Gate {gate.name} not implemented yet in the script.")
 
 def synthesize_pp_and_ct(pauliopt_circuit, num_qubits):
     # Create CliffordTableau and PauliPolynomial
@@ -106,7 +77,7 @@ def lex_synth(pp, ct: CliffordTableau, topo):
     print("Lex pp circuit:", lex_pp.count_ops())
     # Prepend the trailing cliffords
     for gate in trailing_clifford.gates:
-        ct.prepend_gate(gate)
+        ct.append_gate(gate)
     # Synthesize the new CliffordTableau
     lex_ct_pauliopt = synthesize_tableau_perm_row_col(ct, topo=copy(topo))
     lex_ct = lex_ct_pauliopt.to_qiskit()
@@ -123,6 +94,7 @@ def factoring21(qiskit_circuit):
     from fractions import Fraction
     import math 
     import pandas as pd
+    import matplotlib.pyplot as plt
 
     shotcount = 100
     sim = Aer.get_backend('qasm_simulator')
@@ -146,7 +118,10 @@ def factoring21(qiskit_circuit):
         frac = Fraction(int(num, 2),1024).limit_denominator(21)
         fraction.append(frac)
         denominator.append(frac.denominator)
-
+    
+    plt.bar(number_hit, frequency)
+    plt.show()
+    
 
     df = pd.DataFrame ({
         "number hit": number_hit,
@@ -200,11 +175,23 @@ def split_circuit_before_measurement(qiskit_circuit):
     print("Post barrier circuit", post_circuit.count_ops())
     return circuit, post_circuit
 
+def generate_permutation_circuit(qiskit_circuit):
+    d = qiskit_circuit.count_ops()
+    key = next(k for k in d if k.startswith('permutation'))
+    pattern = key.split("_",1) [1].strip("[]")
+    permutation_table = [int(x) for x in pattern.split(",") if x]
+    from qiskit.circuit.library import Permutation
+    permutation_circuit = Permutation(num_qubits=qiskit_circuit.num_qubits, pattern=permutation_table)
+    return permutation_circuit
 
+def generate_reverse_permutation_circuit(qiskit_circuit):
+    permutation_circuit = generate_permutation_circuit(qiskit_circuit)
+    permutation_circuit_inverse = permutation_circuit.inverse()
+    return permutation_circuit_inverse
 
 if __name__ == "__main__":
     do_routing = False
-    true_QFT = False
+    true_QFT = True
     
     if do_routing:
         backend = FakeBoeblingenV2()
@@ -221,7 +208,6 @@ if __name__ == "__main__":
 
     #qasm to qiskit    
     qiskit_circuit = QuantumCircuit.from_qasm_file(qasm_name)
-    print("Circuit with measurements", qiskit_circuit.count_ops())
     new_circuit, post_circuit = split_circuit_before_measurement(qiskit_circuit)
     num_qubits = new_circuit.num_qubits
     qiskit_transpile = transpile(new_circuit, backend=backend, basis_gates=['h', 'cx', 'x', 'rz', 'sx', 's', 'sxdg'], optimization_level=3)
@@ -233,35 +219,40 @@ if __name__ == "__main__":
     pp, ct = synthesize_pp_and_ct(pauliopt_circuit, num_qubits)
     
     from pauliopt.pauli.simplification.simple_simplify import simplify_pauli_polynomial
+
     pp = simplify_pauli_polynomial(pp, allow_acs=False)
     print_pp_info(pp, "Optimized")
     alt_pp = simplify_pauli_polynomial(pp, allow_acs=True)
     print_pp_info(alt_pp, "Shuffled = Wrong")
-
     #pauliopt to qiskit 
     naive_circuit_no_acs = naive_synth(deepcopy(pp), deepcopy(ct), topo)
     naive_circuit_acs = naive_synth(deepcopy(alt_pp), deepcopy(ct), topo)
     lex_circuit_no_acs = lex_synth(deepcopy(pp), deepcopy(ct), topo)
     lex_circuit_acs = lex_synth(deepcopy(alt_pp), deepcopy(ct), topo)
+ 
 
-    #add measurement after barrier back 
+    #add permutation and measurement after barrier back 
     qiskit_transpile_full = qiskit_transpile.compose(post_circuit)
     naive_circuit_no_acs_full = naive_circuit_no_acs.compose(post_circuit)
     naive_circuit_acs_full = naive_circuit_acs.compose(post_circuit)
-    lex_circuit_no_acs_full = lex_circuit_no_acs.compose(post_circuit)
-    lex_circuit_acs_full = lex_circuit_acs.compose(post_circuit)
 
-    #run and makesure factoring 21 is correct
+    lex_circuit_no_acs_full = lex_circuit_no_acs.compose(generate_reverse_permutation_circuit(lex_circuit_no_acs)).compose(post_circuit)
+    
+    lex_circuit_acs_full = lex_circuit_acs.compose(generate_reverse_permutation_circuit(lex_circuit_no_acs)).compose(post_circuit)
+
+
+    # run and makesure factoring 21 is correct
     print("\n\n\n")
-    print("original factor")
+    print("original circuit result")
     factoring21(qiskit_circuit)
-    print("qiskit transpiled factor")
+    print("qiskit transpiled result")
     factoring21(qiskit_transpile_full)
-    print("naive_circuit_no_acs_factor")
+    print("naive_circuit_no_acs_result")
     factoring21(naive_circuit_no_acs_full)
-    print("naive_circuit_acs_factor")
+    print("naive_circuit_acs_result")
     factoring21(naive_circuit_acs_full)
-    print("lex_circuit_no_acs_factor")
+    print("lex_circuit_no_acs_result")
     factoring21(lex_circuit_no_acs_full)
-    print("lex_circuit_acs_factor")
+    print("lex_circuit_acs_result")
     factoring21(lex_circuit_acs_full)
+

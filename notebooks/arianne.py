@@ -130,3 +130,4 @@ def lex_synth(pp, ct: CliffordTableau, topo):
 
 lex_synth(deepcopy(pp), deepcopy(ct), topo)
 lex_synth(deepcopy(alt_pp), deepcopy(ct), topo)
+
